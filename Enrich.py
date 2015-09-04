@@ -1,4 +1,5 @@
 import re
+import nltk
 from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.corpus import stopwords
 from nltk.corpus import wordnet as wn
@@ -12,6 +13,16 @@ class SynapsifyEnrich:
     candidate_file = 'candidate.txt'    
     
     def __init__(self):
+        self.wordnet_lemmatizer = WordNetLemmatizer()
+        self.stop_list = set(stopwords.words('english'))
+        self.stop_list1 = set(stopwords.words('english'))
+        self.senti_object = extractor()
+        with open('trust_model.pickle', 'rb') as handle:
+            self.model = pickle.load(handle)
+        with open('feature_names.pickle','rb') as handle:
+            self.feature_names = pickle.load(handle)
+        with open('vectorizer.pickle','rb') as handle:
+            self.vectorizer = pickle.load(handle)
         for topics in ['Civil Rights','Economy','Education','Energy','Entitlements','Foreign Policy','Government and Political reform','Immigration','Jobs','National Security']:
             with open(topics+'.txt') as f:
                 content = f.readlines()
@@ -26,6 +37,22 @@ class SynapsifyEnrich:
             for x in content:
                 x = self.preProcessKeywords(x)
                 self.candidate_list.append(x)
+                
+    def getNonAlphaNumericCount(self,text):
+        count = 0
+        for char in text:
+            if not (char.isalpha() or char.isdigit()):
+                count += 1
+        return count
+       
+    def checkIgnoreWords(self,text):
+        if(len(text) > 400 ):
+            return True        
+        if(text in self.stop_list):
+            return True
+        if((self.getNonAlphaNumericCount(text)/len(text) ) > 0.5):
+            return True
+        return False
                 
     def preProcessKeywords(self,text):       
         text = text.strip().lower()
@@ -50,7 +77,7 @@ class SynapsifyEnrich:
                 topics_match.append(topics)
         return topics_match
 
-    def document_to_wordlist_syn( self,doc,feature_names):
+    def document_to_wordlist_syn( self,doc,feature_names,fastmode):
 
         review_text = re.sub("[^a-zA-Z]"," ", doc)
 
@@ -69,7 +96,7 @@ class SynapsifyEnrich:
                 words_len2.append(w)
 
 
-        stops = set(stopwords.words("english"))
+        stops = self.stop_list1
         new_words = ["hillary","clinton","hillaryclinton","hilary","trump","donald","donaldtrump","rt","bush",
                      "abc","abcs","yrs","yet","yea","yeah","ya","might","yes","reagan","used","usual"
                      "use","george","exactly","thiessen","seem","cruz","powell","msnbc","still",
@@ -80,66 +107,73 @@ class SynapsifyEnrich:
                      "couldnt","shouldnt","non"]
         stops_new = stops.difference(neg_words)
         words = [w for w in words_len2 if not w in stops_new]
+        
+        if fastmode == False:
+            for w in words:
 
-        for w in words:
+                if w in feature_names:
+                    continue
+                else:
+                    syns = wn.synsets(w)
+                    # print "here"
+                    list_of_syn = set()
+                    for s in syns:
+                        list_of_syn.update(s.lemma_names())
+                    for synonym in list_of_syn:
+                        if synonym in feature_names:
+                            words.append(synonym)
 
-            if w in feature_names:
-                continue
-            else:
-                syns = wn.synsets(w)
-                # print "here"
-                list_of_syn = set()
-                for s in syns:
-                    list_of_syn.update(s.lemma_names())
-                for synonym in list_of_syn:
-                    if synonym in feature_names:
-                        words.append(synonym)
+            
 
         return(words)
 
-    def clean_test_data(self,X,feature_names):
+    def clean_test_data(self,X,feature_names,fastmode):
         clean = []
         for i in xrange( 0, len(X)):
-            clean.append(" ".join(self.document_to_wordlist_syn(X[i],feature_names)))
+            clean.append(" ".join(self.document_to_wordlist_syn(X[i],feature_names,fastmode)))
         return clean
 
-    def getTrustwothiness(self,comment):
+    def getTrustworthiness(self,comment,fastmode = False):
         ###Load pickl files
-        with open('trust_model.pickle', 'rb') as handle:
-            model = pickle.load(handle)
-        with open('feature_names.pickle','rb') as handle:
-            feature_names = pickle.load(handle)
-        with open('vectorizer.pickle','rb') as handle:
-            vectorizer = pickle.load(handle)
+        
         comment = [comment]
-        comment_clean = self.clean_test_data(comment,feature_names)
+        comment_clean = self.clean_test_data(comment,self.feature_names,fastmode)
         # print feature_names
             # print comment_clean
-        comment_features = vectorizer.transform(comment_clean)
+        comment_features = self.vectorizer.transform(comment_clean)
         comment_features = comment_features.toarray()
-        prediction = model.predict(comment_features)
+        prediction = self.model.predict(comment_features)
         # print prediction
         if prediction == 1:
             return "Trustworthy"
         else:
             return "Untrustworthy"
 
-    def getSentiment(self,text):
-
-        S = extractor()
-        score_sentiment = scorer().scaleScore(S.getSentimentScore(text))
-
+    def getSentiment(self,text):        
+        score_sentiment = scorer().scaleScore(self.senti_object.getSentimentScore(text))
         if score_sentiment <= -2:
             return "Negative"
         elif score_sentiment >= 2:
             return "Positive"
         else:
             return "Neutral"
-
-  
+    
+    def getLemmaList(self,text):
+        text_tokens = nltk.word_tokenize(text)
+        lemma_list = []
+        for x in text_tokens:
+            x = x.lower()
+            if(self.checkIgnoreWords(x) == False):
+                x = re.sub('s/[^a-z0-9]//ig','',x)
+                x = self.wordnet_lemmatizer.lemmatize(x)
+                if (len(x) > 3):
+                    lemma_list.append(x)
+        return lemma_list
+    
 senrich = SynapsifyEnrich()
 print "Keyword Dictionary: ",senrich.keyword_dict
 print "Candidate: ",senrich.getCandidateMatch('hillary clinton is a strong advocate for the minimum wage program')
 print "Topics: ",senrich.getTopics('hillary clinton is a strong advocate for the minimum wage program 911')
 print "Sentiment: ",senrich.getSentiment('hillary clinton is a strong advocate for the minimum wage program 911')
-print "Trustworthiness: ",senrich.getTrustwothiness('hillary clinton is a blatant liar')
+print "Trustworthiness: ",senrich.getTrustworthiness('hillary clinton is a blatant liar')
+print "Lemma List: ",senrich.getLemmaList('hillary clinton is a blatant @.Int237838273 churches $$$$.2 liar')
