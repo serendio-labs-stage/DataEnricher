@@ -3,6 +3,8 @@ from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.corpus import stopwords
 from nltk.corpus import wordnet as wn
 import pickle
+from general import extractor
+from scoreScaler import scorer
 class SynapsifyEnrich:
     keyword_dict = {}
     candidate_list = []
@@ -43,7 +45,7 @@ class SynapsifyEnrich:
         for topics in self.keyword_dict:            
             regex_keys = r'\b|\b'.join(self.keyword_dict[topics])
             keywords_regex = re.compile(r'(\b{0}\b)'.format(regex_keys),re.UNICODE | re.IGNORECASE)
-            print keywords_regex.pattern
+            # print keywords_regex.pattern
             if re.search(keywords_regex,text) != None: 
                 topics_match.append(topics)
         return topics_match
@@ -121,9 +123,23 @@ class SynapsifyEnrich:
             return "Trustworthy"
         else:
             return "Untrustworthy"
+
+    def getSentiment(self,text):
+
+        S = extractor()
+        score_sentiment = scorer().scaleScore(S.getSentimentScore(text))
+
+        if score_sentiment <= -2:
+            return "Negative"
+        elif score_sentiment >= 2:
+            return "Positive"
+        else:
+            return "Neutral"
+
   
 senrich = SynapsifyEnrich()
-print senrich.keyword_dict
-print senrich.getCandidateMatch('hillary clinton is a strong advocate for the minimum wage program')
-print senrich.getTopics('hillary clinton is a strong advocate for the minimum wage program 911')
-print senrich.getTrustwothiness('hillary clinton is a blatant liar')
+print "Keyword Dictionary: ",senrich.keyword_dict
+print "Candidate: ",senrich.getCandidateMatch('hillary clinton is a strong advocate for the minimum wage program')
+print "Topics: ",senrich.getTopics('hillary clinton is a strong advocate for the minimum wage program 911')
+print "Sentiment: ",senrich.getSentiment('hillary clinton is a strong advocate for the minimum wage program 911')
+print "Trustworthiness: ",senrich.getTrustwothiness('hillary clinton is a blatant liar')
