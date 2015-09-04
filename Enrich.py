@@ -133,7 +133,7 @@ class SynapsifyEnrich:
             clean.append(" ".join(self.document_to_wordlist_syn(X[i],feature_names,fastmode)))
         return clean
 
-    def getTrustworthiness(self,comment,fastmode = False):
+    def getTrustworthiness(self,comment,fastmode = True):
         ###Load pickl files
         
         comment = [comment]
