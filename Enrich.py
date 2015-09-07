@@ -53,7 +53,17 @@ class SynapsifyEnrich:
         if((self.getNonAlphaNumericCount(text)/len(text) ) > 0.5):
             return True
         return False
-                
+    
+    def extract_entity_names(self,t):
+        entity_names = []
+        if hasattr(t, 'label') and t.label:
+            if t.label() == 'NE':
+                entity_names.append(' '.join([child[0] for child in t]))
+            else:
+                for child in t:
+                    entity_names.extend(self.extract_entity_names(child))
+        return entity_names
+            
     def preProcessKeywords(self,text):       
         text = text.strip().lower()
         text = ''.join(i for i in text if ord(i)<128)
@@ -170,6 +180,16 @@ class SynapsifyEnrich:
                     lemma_list.append(x)
         return lemma_list
     
+    def getNamedEntities(self,text):
+        sentences = nltk.sent_tokenize(text)
+        tokenized_sentences = [nltk.word_tokenize(sentence) for sentence in sentences]
+        tagged_sentences = [nltk.pos_tag(sentence) for sentence in tokenized_sentences]
+        chunked_sentences = nltk.ne_chunk_sents(tagged_sentences, binary=True)
+        entity_names = []
+        for tree in chunked_sentences:
+            entity_names.extend(self.extract_entity_names(tree))
+        return entity_names  
+            
 senrich = SynapsifyEnrich()
 print "Keyword Dictionary: ",senrich.keyword_dict
 print "Candidate: ",senrich.getCandidateMatch('hillary clinton is a strong advocate for the minimum wage program')
@@ -177,3 +197,4 @@ print "Topics: ",senrich.getTopics('hillary clinton is a strong advocate for the
 print "Sentiment: ",senrich.getSentiment('hillary clinton is a strong advocate for the minimum wage program 911')
 print "Trustworthiness: ",senrich.getTrustworthiness('hillary clinton is a blatant liar')
 print "Lemma List: ",senrich.getLemmaList('hillary clinton is a blatant @.Int237838273 churches $$$$.2 liar')
+print "Named entity List: ",senrich.getNamedEntities('Hillary Clinton is one of the presidential candidates for USA')
